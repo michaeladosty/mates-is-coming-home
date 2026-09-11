@@ -411,10 +411,11 @@
 
   /* ---------- kvíz ---------- */
   .quizbox{border-top:1px solid var(--line-soft);padding-top:22px}
-  .tabs{display:flex;border:1px solid var(--line);border-radius:9px;overflow:hidden;width:fit-content;margin-bottom:16px}
+  .tabs{display:flex;border:1px solid var(--line);border-radius:11px;overflow:hidden;width:fit-content;margin-bottom:18px;box-shadow:var(--shadow)}
+  .tabs{border-width:2px}
   .tab{
-    background:transparent;border:0;border-radius:0;color:var(--muted);font-weight:500;
-    font-family:var(--mono);font-size:11.5px;letter-spacing:.12em;text-transform:uppercase;padding:9px 15px;
+    background:transparent;border:0;border-radius:0;color:var(--text);font-weight:600;
+    font-family:var(--mono);font-size:13px;letter-spacing:.1em;text-transform:uppercase;padding:13px 22px;
   }
   .tab + .tab{border-left:1px solid var(--line)}
   .tab:hover{color:var(--text);filter:none}
@@ -512,6 +513,7 @@
   .danger{margin-top:20px;padding-top:16px;border-top:1px solid var(--line-soft);display:flex;gap:12px;align-items:center;flex-wrap:wrap}
   .danger-note{font-size:12.5px;color:var(--muted);max-width:40ch}
   .danger button.armed{border-color:var(--bad);color:var(--bad);font-weight:600}
+  .danger select{width:auto;min-width:150px}
 
   .notice{
     border:1px dashed var(--amber-dim);border-radius:10px;padding:12px 15px;
@@ -704,7 +706,7 @@
 
     <div class="tabs" role="tablist">
       <button type="button" class="tab is-on" id="tab-quote">Dnešní hry</button>
-      <button type="button" class="tab" id="tab-board">Žebříček</button>
+      <button type="button" class="tab" id="tab-board">🏆 Žebříček</button>
     </div>
 
     <div id="panel-quote">
@@ -758,6 +760,12 @@
         <button type="button" class="ghost" id="nz-false">Blbost</button>
       </div>
 
+      <div class="game-split">
+        <h3 class="game-head">🏆 Žebříček</h3>
+        <div class="board-wrap"><table class="board" id="board2"></table></div>
+        <p class="board-legend">Body: hláška dne 5 za trefu napoprvé a 3 napodruhé · vlajka 3 nebo 1 za stát a totéž za hlavní město · F1 1 · Zéland +2 za trefu a −1 za vedle · lok 1 denně</p>
+      </div>
+
       <p class="quiz-msg" id="nz-msg"></p>
       <ul class="today-list" id="nz-today"></ul>
       </div>
@@ -769,7 +777,7 @@
     </div>
   </section>
 
-  <details class="settings">
+  <details class="settings" id="settings-box" hidden>
     <summary>Šuplík s nastavením</summary>
     <div class="fields">
       <div class="field">
@@ -807,6 +815,11 @@
     <div class="settings-actions">
       <button type="button" id="save-settings">Uložit</button>
       <span class="status" id="save-status"></span>
+    </div>
+
+    <div class="danger">
+      <select id="wipe-who" aria-label="Hráč"></select>
+      <button type="button" class="ghost" id="wipe-player">Smazat body hráče</button>
     </div>
 
     <div class="danger">
@@ -1440,6 +1453,7 @@
     }
 
     renderHeaderTexts();
+    applyAdmin();
 
     selectedKey = null;
     renderCalendar();
@@ -2715,32 +2729,110 @@
       return b.total - a.total || a.name.localeCompare(b.name, "cs");
     });
 
-    var box = el("board");
-    box.innerHTML = "";
+    lastRows = rows;
+    fillPlayerPicker(rows);
+
+    var html;
     if (!rows.length) {
-      box.innerHTML = "<tr><td class='nm'>Zatím nikdo nemá ani bod. Buď první.</td></tr>";
-      return;
-    }
-
-    var head = document.createElement("tr");
-    head.innerHTML = "<th></th><th>Jméno</th><th>Hlášky</th><th>Vlajky</th><th>F1</th><th>Zéland</th><th>Loky</th><th>Celkem</th>";
-    box.appendChild(head);
-
-    var me = nameKey(myName);
-    rows.forEach(function (r, i) {
-      var tr = document.createElement("tr");
-      tr.className = (i === 0 ? "first" : "") + (r.key === me ? " me" : "");
+      html = "<tr><td class='nm'>Zatím nikdo nemá ani bod. Buď první.</td></tr>";
+    } else {
+      var me = nameKey(myName);
       function cell(val) {
         return "<td class='" + (val ? "" : "zero") + "'>" + (val > 0 ? "+" + val : val) + "</td>";
       }
-      tr.innerHTML =
-        "<td class='rank'>" + (i + 1) + ".</td>" +
-        "<td class='nm'>" + esc(r.name) + "</td>" +
-        cell(r.quote) + cell(r.flag) + cell(r.f1) + cell(r.nz) + cell(r.sip) +
-        "<td class='total'>" + r.total + "</td>";
-      box.appendChild(tr);
+      html = "<tr><th></th><th>Jméno</th><th>Hlášky</th><th>Vlajky</th><th>F1</th>" +
+        "<th>Zéland</th><th>Loky</th><th>Celkem</th></tr>";
+      rows.forEach(function (r, i) {
+        html += "<tr class='" + (i === 0 ? "first" : "") + (r.key === me ? " me" : "") + "'>" +
+          "<td class='rank'>" + (i + 1) + ".</td>" +
+          "<td class='nm'>" + esc(r.name) + "</td>" +
+          cell(r.quote) + cell(r.flag) + cell(r.f1) + cell(r.nz) + cell(r.sip) +
+          "<td class='total'>" + r.total + "</td></tr>";
+      });
+    }
+    ["board", "board2"].forEach(function (id) {
+      var box = el(id);
+      if (box) { box.innerHTML = html; }
     });
   }
+
+  /* ---------- správa: jen účet Míša ---------- */
+  var ADMIN_KEY = "misa";
+  var lastRows = [];
+
+  function isAdmin() { return !!myName && nameKey(myName) === ADMIN_KEY; }
+
+  function applyAdmin() {
+    var box = el("settings-box");
+    if (box) { box.hidden = !isAdmin(); }
+  }
+
+  function fillPlayerPicker(rows) {
+    var sel = el("wipe-who");
+    if (!sel) { return; }
+    var keep = sel.value;
+    sel.innerHTML = "";
+    rows.forEach(function (r) {
+      var o = document.createElement("option");
+      o.value = r.key;
+      o.textContent = r.name + " (" + r.total + ")";
+      sel.appendChild(o);
+    });
+    if (keep) { sel.value = keep; }
+  }
+
+  /** Smaže jednoho hráče ze všech denních záznamů. */
+  function wipePlayer(key) {
+    var jobs = [];
+    function scrub(coll, map, field) {
+      Object.keys(map).forEach(function (day) {
+        var entries = map[day] || {};
+        if (!entries[key]) { return; }
+        var rest = {};
+        Object.keys(entries).forEach(function (k) { if (k !== key) { rest[k] = entries[k]; } });
+        var body = { day: day };
+        body[field] = rest;
+        jobs.push(db.doc(coll + "/" + day).set(body));
+      });
+    }
+    scrub("quiz", quizDays, "entries");
+    scrub("nz", nzDays, "entries");
+    scrub("flags", flagDays, "entries");
+    scrub("f1", f1Days, "entries");
+    scrub("sips", sipDays, "drinkers");
+    return Promise.all(jobs);
+  }
+
+  var wipeArmed = false;
+  el("wipe-player").addEventListener("click", function () {
+    var btn = el("wipe-player");
+    var sel = el("wipe-who");
+    if (!db || !sel.value) { flash("Vyber hráče."); return; }
+    var name = sel.options[sel.selectedIndex].textContent;
+
+    if (!wipeArmed) {
+      wipeArmed = true;
+      btn.textContent = "Opravdu smazat? Klikni znovu";
+      btn.className = "ghost armed";
+      setTimeout(function () {
+        if (wipeArmed) { wipeArmed = false; btn.textContent = "Smazat body hráče"; btn.className = "ghost"; }
+      }, 6000);
+      return;
+    }
+
+    wipeArmed = false;
+    btn.disabled = true;
+    btn.textContent = "Mažu…";
+    btn.className = "ghost";
+    wipePlayer(sel.value).then(function () {
+      flash("Body hráče " + name + " jsou smazané.");
+    })["catch"](function (e) {
+      flash("Smazání se nepovedlo." + why(e));
+    }).then(function () {
+      btn.disabled = false;
+      btn.textContent = "Smazat body hráče";
+    });
+  });
 
   function submitGuess() {
     if (!db) { return; }
