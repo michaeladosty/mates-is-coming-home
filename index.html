@@ -2757,10 +2757,13 @@
   }
 
   /* ---------- správa: jen účet Míša ---------- */
-  var ADMIN_KEY = "misa";
+  // Správu vidí Míša — i když se přihlásí s překlepem ve jménu.
+  var ADMIN_KEYS = ["misa", "misaa", "misaaa", "michaela", "misha"];
   var lastRows = [];
 
-  function isAdmin() { return !!myName && nameKey(myName) === ADMIN_KEY; }
+  function isAdmin() {
+    return !!myName && ADMIN_KEYS.indexOf(nameKey(myName)) !== -1;
+  }
 
   function applyAdmin() {
     var box = el("settings-box");
