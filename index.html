@@ -2674,9 +2674,13 @@
 
   function renderBoard() {
     var totals = {};
-    function bump(k, name, cat, pts) {
-      if (!totals[k]) { totals[k] = { name: name, quote: 0, flag: 0, f1: 0, nz: 0, sip: 0 }; }
+    // Každý, kdo se hry dotkl, se objeví — i když zatím nemá ani bod.
+    function seen(k, name) {
+      if (!totals[k]) { totals[k] = { name: name || k, quote: 0, flag: 0, f1: 0, nz: 0, sip: 0 }; }
       if (name) { totals[k].name = name; }
+    }
+    function bump(k, name, cat, pts) {
+      seen(k, name);
       totals[k][cat] += pts;
     }
 
@@ -2684,7 +2688,9 @@
       var day = quizDays[dk];
       Object.keys(day).forEach(function (k) {
         var e = day[k];
-        if (e && e.points) { bump(k, e.name, "quote", e.points); }
+        if (!e) { return; }
+        seen(k, e.name);
+        if (e.points) { bump(k, e.name, "quote", e.points); }
       });
     });
 
@@ -2693,6 +2699,7 @@
       Object.keys(day).forEach(function (k) {
         var e = day[k];
         if (!e) { return; }
+        seen(k, e.name);
         var pts = flagPart(e, "c").points + flagPart(e, "k").points;
         if (pts) { bump(k, e.name, "flag", pts); }
       });
@@ -2702,7 +2709,9 @@
       var day = f1Days[dk];
       Object.keys(day).forEach(function (k) {
         var e = day[k];
-        if (e && e.points) { bump(k, e.name, "f1", e.points); }
+        if (!e) { return; }
+        seen(k, e.name);
+        if (e.points) { bump(k, e.name, "f1", e.points); }
       });
     });
 
@@ -2710,7 +2719,9 @@
       var day = nzDays[dk];
       Object.keys(day).forEach(function (k) {
         var e = day[k];
-        if (e && e.points) { bump(k, e.name, "nz", e.points); }
+        if (!e) { return; }
+        seen(k, e.name);
+        if (e.points) { bump(k, e.name, "nz", e.points); }
       });
     });
 
