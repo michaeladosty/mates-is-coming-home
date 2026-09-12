@@ -823,6 +823,11 @@
     </div>
 
     <div class="danger">
+      <button type="button" class="ghost" id="wipe-today">Smazat dnešní odpovědi všem</button>
+      <span class="danger-note">Hodí se, když se zadání změnilo pod rukama. Zůstanou loky i starší dny.</span>
+    </div>
+
+    <div class="danger">
       <select id="wipe-who" aria-label="Hráč"></select>
       <button type="button" class="ghost" id="wipe-player">Smazat body hráče</button>
     </div>
@@ -1937,6 +1942,7 @@
     var item = f1ForDay(key);
     var day = f1Days[key] || {};
     var mine = day[nameKey(myName)] || null;
+    if (stale(mine, item.q)) { mine = null; }
 
     el("f1-text").textContent = item.q;
 
@@ -1991,10 +1997,10 @@
     var key = todayKey();
     var day = f1Days[key] || {};
     var k = nameKey(n);
-    if (day[k]) { return; }
+    if (day[k] && !stale(day[k], f1ForDay(key).q)) { return; }
 
     var ok = choice === f1ForDay(key).a;
-    var entry = { name: n, choice: choice, ok: ok, points: ok ? 1 : 0, at: Date.now() };
+    var entry = { name: n, q: f1ForDay(key).q, choice: choice, ok: ok, points: ok ? 1 : 0, at: Date.now() };
 
     var ref = db.doc("f1/" + key);
     var patch = {}; patch[k] = entry;
@@ -2211,6 +2217,7 @@
     var item = flagForDay(key);
     var day = flagDays[key] || {};
     var mine = day[nameKey(myName)] || null;
+    if (stale(mine, item.name)) { mine = null; }
 
     el("flag-svg").innerHTML = item.svg;
     renderFlagPart("c", item, mine,
@@ -2245,6 +2252,7 @@
     var day = flagDays[key] || {};
     var k = nameKey(n);
     var mine = day[k] || null;
+    if (stale(mine, item.name)) { mine = null; }
     var part = flagPart(mine, which);
     if (part.solved || part.tries >= 2) { return; }
 
@@ -2253,7 +2261,7 @@
       : flagMatches(guess, item.cap, item.capAlt);
     var tries = part.tries + 1;
 
-    var entry = { name: n, at: Date.now() };
+    var entry = { name: n, q: item.name, at: Date.now() };
     entry[which] = { tries: tries, solved: ok, points: ok ? (tries === 1 ? 3 : 1) : 0 };
 
     el(inputId).value = "";
@@ -2389,6 +2397,7 @@
     var item = nzForDay(key);
     var day = nzDays[key] || {};
     var mine = day[nameKey(myName)] || null;
+    if (stale(mine, item.t)) { mine = null; }
     var solvers = Object.keys(day).map(function (k) { return day[k]; })
       .filter(function (e) { return e && e.ok; })
       .sort(function (a, b) { return (a.at || 0) - (b.at || 0); });
@@ -2439,10 +2448,10 @@
     var key = todayKey();
     var day = nzDays[key] || {};
     var k = nameKey(n);
-    if (day[k]) { return; }
+    if (day[k] && !stale(day[k], nzForDay(key).t)) { return; }
 
     var ok = said === nzForDay(key).a;
-    var entry = { name: n, said: said, ok: ok, points: ok ? 2 : -1, at: Date.now() };
+    var entry = { name: n, q: nzForDay(key).t, said: said, ok: ok, points: ok ? 2 : -1, at: Date.now() };
     el("nz-true").disabled = true;
     el("nz-false").disabled = true;
 
@@ -2637,6 +2646,13 @@
     return false;
   }
 
+  /** Odpověď platí jen k tomu zadání, na které byla dána.
+      Kdyby se pořadí otázek někdy posunulo, starý záznam se přestane počítat
+      místo toho, aby hlásil nesmysl. */
+  function stale(entry, expected) {
+    return !!(entry && entry.q && expected && entry.q !== expected);
+  }
+
   /** Body podle TVÉHO pokusu, ne podle toho, kdo byl dřív. */
   function pointsForTry(tries) {
     return tries === 1 ? 5 : 3;
@@ -2652,8 +2668,9 @@
     var pick = quoteForDay(key);
     var day = quizDays[key] || {};
     var mine = day[nameKey(myName)] || null;
+    if (stale(mine, pick.q)) { mine = null; }
     var solvers = Object.keys(day).map(function (k) { return day[k]; })
-      .filter(function (e) { return e && e.solved; })
+      .filter(function (e) { return e && e.solved && !stale(e, pick.q); })
       .sort(function (a, b) { return (a.at || 0) - (b.at || 0); });
 
     el("quote-text").textContent = "\u201C" + pick.q + "\u201D";
@@ -2705,9 +2722,10 @@
 
     Object.keys(quizDays).forEach(function (dk) {
       var day = quizDays[dk];
+      var qq = quoteForDay(dk).q;
       Object.keys(day).forEach(function (k) {
         var e = day[k];
-        if (!e) { return; }
+        if (!e || stale(e, qq)) { return; }
         seen(k, e.name);
         if (e.points) { bump(k, e.name, "quote", e.points); }
       });
@@ -2715,9 +2733,10 @@
 
     Object.keys(flagDays).forEach(function (dk) {
       var day = flagDays[dk];
+      var qq = flagForDay(dk).name;
       Object.keys(day).forEach(function (k) {
         var e = day[k];
-        if (!e) { return; }
+        if (!e || stale(e, qq)) { return; }
         seen(k, e.name);
         var pts = flagPart(e, "c").points + flagPart(e, "k").points;
         if (pts) { bump(k, e.name, "flag", pts); }
@@ -2726,9 +2745,10 @@
 
     Object.keys(f1Days).forEach(function (dk) {
       var day = f1Days[dk];
+      var qq = f1ForDay(dk).q;
       Object.keys(day).forEach(function (k) {
         var e = day[k];
-        if (!e) { return; }
+        if (!e || stale(e, qq)) { return; }
         seen(k, e.name);
         if (e.points) { bump(k, e.name, "f1", e.points); }
       });
@@ -2736,9 +2756,10 @@
 
     Object.keys(nzDays).forEach(function (dk) {
       var day = nzDays[dk];
+      var qq = nzForDay(dk).t;
       Object.keys(day).forEach(function (k) {
         var e = day[k];
-        if (!e) { return; }
+        if (!e || stale(e, qq)) { return; }
         seen(k, e.name);
         if (e.points) { bump(k, e.name, "nz", e.points); }
       });
@@ -2836,6 +2857,36 @@
     return Promise.all(jobs);
   }
 
+  var todayArmed = false;
+  el("wipe-today").addEventListener("click", function () {
+    var btn = el("wipe-today");
+    if (!db) { flash("Nejsme připojení k databázi."); return; }
+    if (!todayArmed) {
+      todayArmed = true;
+      btn.textContent = "Opravdu smazat dnešek? Klikni znovu";
+      btn.className = "ghost armed";
+      setTimeout(function () {
+        if (todayArmed) { todayArmed = false; btn.textContent = "Smazat dnešní odpovědi všem"; btn.className = "ghost"; }
+      }, 6000);
+      return;
+    }
+    todayArmed = false;
+    btn.disabled = true;
+    btn.textContent = "Mažu…";
+    btn.className = "ghost";
+    var key = todayKey();
+    Promise.all(["quiz", "nz", "flags", "f1"].map(function (c) {
+      return db.doc(c + "/" + key)["delete"]();
+    })).then(function () {
+      flash("Dnešní odpovědi jsou smazané, můžete hrát znovu.");
+    })["catch"](function (e) {
+      flash("Mazání se nepovedlo." + why(e));
+    }).then(function () {
+      btn.disabled = false;
+      btn.textContent = "Smazat dnešní odpovědi všem";
+    });
+  });
+
   var wipeArmed = false;
   el("wipe-player").addEventListener("click", function () {
     var btn = el("wipe-player");
@@ -2879,11 +2930,13 @@
     var day = quizDays[key] || {};
     var k = nameKey(n);
     var mine = day[k] || { name: n, tries: 0, solved: false, points: 0 };
+    if (stale(mine, pick.q)) { mine = { name: n, tries: 0, solved: false, points: 0 }; }
     if (mine.solved || mine.tries >= 2) { return; }
 
     var ok = isCorrect(guess, pick.who);
     var entry = {
       name: n,
+      q: pick.q,
       tries: (mine.tries || 0) + 1,
       solved: ok,
       points: 0,
