@@ -490,8 +490,13 @@
     font-weight:500;padding:13px 16px;
   }
   .f1-options button:hover:not(:disabled){border-color:var(--amber);filter:none}
-  .f1-options button.right{background:rgba(var(--mint-rgb),.16);border-color:var(--mint);color:var(--mint);font-weight:600}
-  .f1-options button.wrong{background:rgba(207,46,34,.12);border-color:var(--bad);color:var(--bad);font-weight:600}
+  .f1-options button.right,.nz-form button.right{
+    background:rgba(var(--mint-rgb),.16);border-color:var(--mint);color:var(--mint);font-weight:600;
+  }
+  .f1-options button.wrong,.nz-form button.wrong{
+    background:rgba(207,46,34,.12);border-color:var(--bad);color:var(--bad);font-weight:600;
+  }
+  .nz-form button:disabled{opacity:1;cursor:default}
   .f1-options button:disabled{opacity:1;cursor:default}
 
   /* ---------- settings ---------- */
@@ -2389,13 +2394,27 @@
       .sort(function (a, b) { return (a.at || 0) - (b.at || 0); });
 
     el("nz-text").textContent = item.t;
-    el("nz-form").hidden = !!mine || !db || !role;
+
+    // Tlačítka po odpovědi nemizí — zůstanou a obarví se jako u Formule.
+    var tb = el("nz-true"), fb = el("nz-false");
+    el("nz-form").hidden = !db || !role;
+    tb.disabled = !!mine;
+    fb.disabled = !!mine;
+    tb.className = "";
+    fb.className = "ghost";
+    if (mine) {
+      if (item.a) { tb.className = "right"; } else { fb.className = "ghost right"; }
+      if (!mine.ok) {
+        if (mine.said) { tb.className = "wrong"; } else { fb.className = "ghost wrong"; }
+      }
+    }
 
     var msg = el("nz-msg");
     if (mine) {
       msg.className = "quiz-msg " + (mine.ok ? "good" : "bad");
-      msg.textContent = (mine.ok ? "Trefa, +2 body. " : "Vedle, bod dolů. ") +
-        (item.a ? "Je to pravda. " : "Je to blbost. ") + item.why;
+      msg.textContent = "Odpověděl(a) jsi „" + (mine.said ? "Pravda" : "Blbost") + "“. " +
+        (mine.ok ? "Trefa, +2 body. " : "Vedle, bod dolů — je to " + (item.a ? "pravda" : "blbost") + ". ") +
+        item.why;
     } else if (!role) {
       msg.className = "quiz-msg";
       msg.textContent = "Nejdřív se představ nahoře u kalendáře.";
