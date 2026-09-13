@@ -2900,6 +2900,13 @@
       });
     });
 
+    // Ruční srovnání bodů u Zélandu (domluveno 13. 9. 2026). Nikdy nejde pod nulu.
+    var NZ_FIX = { misa: -2 };
+    Object.keys(NZ_FIX).forEach(function (k) {
+      if (!totals[k]) { return; }
+      totals[k].nz = Math.max(0, totals[k].nz + NZ_FIX[k]);
+    });
+
     Object.keys(sipDays).forEach(function (dk) {
       var day = sipDays[dk];
       Object.keys(day).forEach(function (k) { bump(k, day[k], "sip", 1); });
