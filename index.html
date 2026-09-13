@@ -758,27 +758,27 @@
       <div class="game-split">
         <h3 class="game-head">Zéland: pravda, nebo blbost?</h3>
       <blockquote class="bigquote nz" id="nz-text">…</blockquote>
-      <p class="mode-help">Jedno tvrzení o Novém Zélandu denně a jeden pokus. Trefa je za 2 body, špatná odpověď bod dolů.</p>
+      <p class="quiz-msg" id="nz-msg"></p>
+      <p class="mode-help" id="nz-help">Jedno tvrzení o Novém Zélandu denně a jeden pokus. Trefa je za bod, špatná odpověď bod dolů.</p>
 
       <div class="nz-form" id="nz-form">
         <button type="button" id="nz-true">Pravda</button>
         <button type="button" class="ghost" id="nz-false">Blbost</button>
       </div>
 
+      <ul class="today-list" id="nz-today"></ul>
+      </div>
+
       <div class="game-split">
         <h3 class="game-head">🏆 Žebříček</h3>
         <div class="board-wrap"><table class="board" id="board2"></table></div>
-        <p class="board-legend">Body: hláška dne 5 za trefu napoprvé a 3 napodruhé · vlajka 3 nebo 1 za stát a totéž za hlavní město · F1 1 · Zéland +2 za trefu a −1 za vedle · lok 1 denně</p>
-      </div>
-
-      <p class="quiz-msg" id="nz-msg"></p>
-      <ul class="today-list" id="nz-today"></ul>
+        <p class="board-legend">Body: hláška dne 5 za trefu napoprvé a 3 napodruhé · vlajka 3 nebo 1 za stát a totéž za hlavní město · F1 1 · Zéland +1 za trefu a −1 za vedle · lok 1 denně</p>
       </div>
     </div>
 
     <div id="panel-board" hidden>
       <div class="board-wrap"><table class="board" id="board"></table></div>
-      <p class="board-legend">Body: hláška dne 5 za trefu napoprvé a 3 napodruhé · vlajka 3 nebo 1 za stát a totéž za hlavní město · F1 1 · Zéland +2 za trefu a −1 za vedle · lok 1 denně</p>
+      <p class="board-legend">Body: hláška dne 5 za trefu napoprvé a 3 napodruhé · vlajka 3 nebo 1 za stát a totéž za hlavní město · F1 1 · Zéland +1 za trefu a −1 za vedle · lok 1 denně</p>
     </div>
   </section>
 
@@ -2516,6 +2516,10 @@
 
   function nzForDay(key) { return NZ[dayIndex(key, NZ.length)]; }
 
+  // Do 13. 9. 2026 byl Zéland za dva body, od 14. 9. je za jeden.
+  var NZ_ONE_POINT_FROM = "2026-09-14";
+  function nzWin(key) { return key >= NZ_ONE_POINT_FROM ? 1 : 2; }
+
   function renderNz() {
     var key = todayKey();
     var item = nzForDay(key);
@@ -2526,7 +2530,14 @@
       .filter(function (e) { return e && e.ok; })
       .sort(function (a, b) { return (a.at || 0) - (b.at || 0); });
 
+    var win = nzWin(key);
     el("nz-text").textContent = item.t;
+    if (win !== 1) {
+      el("nz-help").textContent = "Jedno tvrzení o Novém Zélandu denně a jeden pokus. Trefa je za dva body, špatná odpověď bod dolů.";
+      Array.prototype.forEach.call(document.querySelectorAll(".board-legend"), function (p) {
+        p.textContent = p.textContent.replace("Zéland +1", "Zéland +" + win);
+      });
+    }
 
     // Tlačítka po odpovědi nemizí — zůstanou a obarví se jako u Formule.
     var tb = el("nz-true"), fb = el("nz-false");
@@ -2546,7 +2557,7 @@
     if (mine) {
       msg.className = "quiz-msg " + (mine.ok ? "good" : "bad");
       msg.textContent = "Odpověděl(a) jsi „" + (mine.said ? "Pravda" : "Blbost") + "“. " +
-        (mine.ok ? "Trefa, +2 body. " : "Vedle, bod dolů — je to " + (item.a ? "pravda" : "blbost") + ". ") +
+        (mine.ok ? "Trefa, +" + (mine.points || win) + ((mine.points || win) === 1 ? " bod. " : " body. ") : "Vedle, bod dolů — je to " + (item.a ? "pravda" : "blbost") + ". ") +
         item.why;
     } else if (!role) {
       msg.className = "quiz-msg";
@@ -2560,7 +2571,7 @@
     list.innerHTML = "";
     solvers.forEach(function (e) {
       var li = document.createElement("li");
-      li.textContent = e.name + " +2";
+      li.textContent = e.name + " +" + (e.points || win);
       list.appendChild(li);
     });
   }
@@ -2575,7 +2586,7 @@
     if (day[k] && !stale(day[k], nzForDay(key).t)) { return; }
 
     var ok = said === nzForDay(key).a;
-    var entry = { name: n, q: nzForDay(key).t, said: said, ok: ok, points: ok ? 2 : -1, at: Date.now() };
+    var entry = { name: n, q: nzForDay(key).t, said: said, ok: ok, points: ok ? nzWin(key) : -1, at: Date.now() };
     el("nz-true").disabled = true;
     el("nz-false").disabled = true;
 
