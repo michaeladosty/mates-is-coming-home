@@ -519,6 +519,7 @@
   .danger-note{font-size:12.5px;color:var(--muted);max-width:40ch}
   .danger button.armed{border-color:var(--bad);color:var(--bad);font-weight:600}
   .danger select{width:auto;min-width:150px}
+  .danger input[type=number]{width:90px}
 
   .notice{
     border:1px dashed var(--amber-dim);border-radius:10px;padding:12px 15px;
@@ -830,6 +831,14 @@
     <div class="danger">
       <select id="wipe-who" aria-label="Hráč"></select>
       <button type="button" class="ghost" id="wipe-player">Smazat body hráče</button>
+    </div>
+
+    <div class="danger">
+      <select id="adj-who" aria-label="Hráč"></select>
+      <input id="adj-pts" type="number" step="1" value="1" aria-label="Kolik bodů">
+      <button type="button" id="adj-add">Připsat</button>
+      <button type="button" class="ghost" id="adj-zero">Vynulovat bonus</button>
+      <span class="danger-note" id="adj-now">Kladné číslo body přidá, záporné ubere. Sečte se to do sloupce Bonus.</span>
     </div>
 
     <div class="danger">
@@ -2513,6 +2522,7 @@
   ];
 
   var nzDays = {};
+  var bonuses = {};   // ruční body: { klic: { name, points } }
 
   function nzForDay(key) { return NZ[dayIndex(key, NZ.length)]; }
 
@@ -2912,11 +2922,22 @@
       Object.keys(day).forEach(function (k) { bump(k, day[k], "sip", 1); });
     });
 
+    // Ruční body od Míši — vlastní sloupec, ať je poznat, odkud se vzaly.
+    Object.keys(bonuses).forEach(function (k) {
+      var b = bonuses[k] || {};
+      if (!b.points) { return; }
+      seen(k, b.name);
+    });
+
+    var anyBonus = Object.keys(totals).some(function (k) { return !!bonusOf(k); });
+
     var rows = Object.keys(totals).map(function (k) {
       var t = totals[k];
+      var bonus = bonusOf(k);
       return {
         key: k, name: t.name, quote: t.quote, flag: t.flag, f1: t.f1, nz: t.nz, sip: t.sip,
-        total: t.quote + t.flag + t.f1 + t.nz + t.sip
+        bonus: bonus,
+        total: t.quote + t.flag + t.f1 + t.nz + t.sip + bonus
       };
     }).sort(function (a, b) {
       return b.total - a.total || a.name.localeCompare(b.name, "cs");
@@ -2934,12 +2955,13 @@
         return "<td class='" + (val ? "" : "zero") + "'>" + (val > 0 ? "+" + val : val) + "</td>";
       }
       html = "<tr><th></th><th>Jméno</th><th>Hlášky</th><th>Vlajky</th><th>F1</th>" +
-        "<th>Zéland</th><th>Loky</th><th>Celkem</th></tr>";
+        "<th>Zéland</th><th>Loky</th>" + (anyBonus ? "<th>Bonus</th>" : "") + "<th>Celkem</th></tr>";
       rows.forEach(function (r, i) {
         html += "<tr class='" + (i === 0 ? "first" : "") + (r.key === me ? " me" : "") + "'>" +
           "<td class='rank'>" + (i + 1) + ".</td>" +
           "<td class='nm'>" + esc(r.name) + "</td>" +
           cell(r.quote) + cell(r.flag) + cell(r.f1) + cell(r.nz) + cell(r.sip) +
+          (anyBonus ? cell(r.bonus) : "") +
           "<td class='total'>" + r.total + "</td></tr>";
       });
     }
@@ -2964,17 +2986,45 @@
   }
 
   function fillPlayerPicker(rows) {
-    var sel = el("wipe-who");
-    if (!sel) { return; }
-    var keep = sel.value;
-    sel.innerHTML = "";
-    rows.forEach(function (r) {
-      var o = document.createElement("option");
-      o.value = r.key;
-      o.textContent = r.name + " (" + r.total + ")";
-      sel.appendChild(o);
+    ["wipe-who", "adj-who"].forEach(function (id) {
+      var sel = el(id);
+      if (!sel) { return; }
+      var keep = sel.value;
+      sel.innerHTML = "";
+      rows.forEach(function (r) {
+        var o = document.createElement("option");
+        o.value = r.key;
+        o.textContent = r.name + " (" + r.total + ")";
+        sel.appendChild(o);
+      });
+      if (keep) { sel.value = keep; }
     });
-    if (keep) { sel.value = keep; }
+    showBonus();
+  }
+
+  /* ---------- ruční body (bonus) ---------- */
+  function bonusOf(k) {
+    var b = bonuses[k];
+    return (b && b.points) || 0;
+  }
+
+  function showBonus() {
+    var sel = el("adj-who"), note = el("adj-now");
+    if (!sel || !note) { return; }
+    if (!sel.value) {
+      note.textContent = "Kladné číslo body přidá, záporné ubere. Sečte se to do sloupce Bonus.";
+      return;
+    }
+    var now = bonusOf(sel.value);
+    var who = sel.options[sel.selectedIndex] ? sel.options[sel.selectedIndex].textContent : "";
+    note.textContent = who.replace(/\s*\(.*\)$/, "") + " má teď ručních bodů: " + (now > 0 ? "+" + now : now) + ".";
+  }
+
+  function saveBonus(key, points, name) {
+    if (!db) { flash("Nejsme připojení k databázi."); return; }
+    var patch = {};
+    patch[key] = { name: name || key, points: points };
+    return db.doc("settings/bonus").set({ by: patch }, { merge: true });
   }
 
   /** Smaže jednoho hráče ze všech denních záznamů. */
@@ -2996,6 +3046,11 @@
     scrub("flags", flagDays, "entries");
     scrub("f1", f1Days, "entries");
     scrub("sips", sipDays, "drinkers");
+    if (bonusOf(key)) {
+      var rest = {};
+      Object.keys(bonuses).forEach(function (k) { if (k !== key) { rest[k] = bonuses[k]; } });
+      jobs.push(db.doc("settings/bonus").set({ by: rest }));
+    }
     return Promise.all(jobs);
   }
 
@@ -3026,6 +3081,38 @@
     }).then(function () {
       btn.disabled = false;
       btn.textContent = "Smazat dnešní odpovědi všem";
+    });
+  });
+
+  el("adj-who").addEventListener("change", showBonus);
+
+  el("adj-add").addEventListener("click", function () {
+    var sel = el("adj-who"), inp = el("adj-pts");
+    if (!sel.value) { flash("Vyber hráče."); return; }
+    var delta = Math.round(Number(inp.value));
+    if (!delta) { flash("Napiš, kolik bodů připsat — klidně i se znaménkem minus."); return; }
+    var name = (sel.options[sel.selectedIndex].textContent || "").replace(/\s*\(.*\)$/, "");
+    var next = bonusOf(sel.value) + delta;
+    var btn = el("adj-add");
+    btn.disabled = true;
+    saveBonus(sel.value, next, name).then(function () {
+      var abs = Math.abs(delta);
+      var slovo = abs === 1 ? "bod" : (abs < 5 ? "body" : "bodů");
+      flash(name + (delta > 0 ? " dostal(a) " + abs : " přišel(a) o " + abs) + " " + slovo +
+        ". Ručních bodů má teď " + (next > 0 ? "+" + next : next) + ".");
+    })["catch"](function (e) {
+      flash("Body se neuložily." + why(e));
+    }).then(function () { btn.disabled = false; });
+  });
+
+  el("adj-zero").addEventListener("click", function () {
+    var sel = el("adj-who");
+    if (!sel.value) { flash("Vyber hráče."); return; }
+    var name = (sel.options[sel.selectedIndex].textContent || "").replace(/\s*\(.*\)$/, "");
+    saveBonus(sel.value, 0, name).then(function () {
+      flash("Ruční body hráče " + name + " jsou vynulované.");
+    })["catch"](function (e) {
+      flash("Nepovedlo se to." + why(e));
     });
   });
 
@@ -3182,6 +3269,7 @@
     wipe("flags", flagDays);
     wipe("f1", f1Days);
     wipe("sips", sipDays);
+    jobs.push(db.doc("settings/bonus").set({ by: {} }));
 
     Promise.all(jobs).then(function () {
       flash("Hotovo — body i loky jsou vynulované.");
@@ -3258,6 +3346,12 @@
 
       el("conn").className = "status";
       el("conn").innerHTML = "<span class='dot'></span>Jsme propojení — všichni vidí totéž, živě.";
+
+      db.doc("settings/bonus").onSnapshot(function (snap) {
+        var d = (snap.exists && snap.data()) || {};
+        bonuses = d.by || {};
+        renderBoard();
+      }, function () { /* bonus není povinný */ });
 
       db.doc("settings/trip").onSnapshot(function (snap) {
         if (snap.exists) {
