@@ -2292,12 +2292,43 @@
     if (!t || !g) { return false; }
     if (g === t) { return true; }
     if (sortedWords(g) === sortedWords(t)) { return true; }
+    if (fold(g.replace(/ /g, "")) === fold(t.replace(/ /g, ""))) { return true; }
 
     var len = Math.max(g.length, t.length);
     var allowed = len >= 11 ? 2 : (len >= 6 ? 1 : 0);
     if (!allowed) { return false; }
-    if (editDistance(g, t) <= allowed) { return true; }
-    return editDistance(sortedWords(g), sortedWords(t)) <= allowed;
+    if (g.charAt(0) === t.charAt(0) && editDistance(g, t) <= allowed) { return true; }
+    var sg = sortedWords(g), st = sortedWords(t);
+    return sg.charAt(0) === st.charAt(0) && editDistance(sg, st) <= allowed;
+  }
+
+  /** Sjednotí obvyklé "psané jinak, zní stejně" — Phyllis/Philys, Toby/Tobi,
+      Stanley/Stanly, Kypr/Kipr. Používá se na obou stranách, takže se porovnává
+      jablko s jablkem. */
+  function fold(w) {
+    return w
+      .replace(/ph/g, "f")
+      .replace(/ck/g, "k")
+      .replace(/c/g, "k")
+      .replace(/q/g, "k")
+      .replace(/w/g, "v")
+      .replace(/y/g, "i")
+      .replace(/(.)\1+/g, "$1");
+  }
+
+  /** Jméno bereme, i když ho někdo napíše po svém — jen ať to není úplně jiné. */
+  function nearName(a, b) {
+    if (!a || !b) { return false; }
+    if (a === b) { return true; }
+    var fa = fold(a), fb = fold(b);
+    if (fa === fb) { return true; }
+    var len = Math.max(fa.length, fb.length);
+    var allowed = len >= 8 ? 2 : (len >= 5 ? 1 : 0);
+    // u kratšího slova povolíme míň chyb, ať se Martin neplete s Martinezem
+    allowed = Math.min(allowed, Math.floor(Math.min(fa.length, fb.length) / 4));
+    // první písmeno musí sedět, jinak by Manáma byla Panama
+    if (fa.charAt(0) !== fb.charAt(0)) { return false; }
+    return allowed > 0 && editDistance(fa, fb) <= allowed;
   }
 
   function flagMatches(guess, correct, alts) {
@@ -2784,9 +2815,15 @@
     var parts = normalize(who).split(" ");
     var full = parts.join(" ");
     if (g === full) { return true; }
+    // celé jméno, klidně i s překlepem
+    if (nearName(g.replace(/ /g, ""), full.replace(/ /g, ""))) { return true; }
+    // stačí křestní nebo příjmení — a taky ho smí napsat po svém
     var words = g.split(" ");
     for (var i = 0; i < words.length; i++) {
-      if (words[i].length > 2 && parts.indexOf(words[i]) !== -1) { return true; }
+      if (words[i].length <= 2) { continue; }
+      for (var j = 0; j < parts.length; j++) {
+        if (parts[j].length > 2 && nearName(words[i], parts[j])) { return true; }
+      }
     }
     return false;
   }
