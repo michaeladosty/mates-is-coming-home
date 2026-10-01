@@ -567,7 +567,7 @@
   <div class="whoami" id="whoami"></div>
 
   <section class="hero">
-    <div class="eyebrow" id="eyebrow">Mates se vrací za</div>
+    <div class="eyebrow" id="eyebrow">Mates a Kačka se vrací za</div>
 
     <div class="clock" id="clock">
       <div class="unit"><span class="num" id="d">—</span><span class="unit-label">dní</span></div>
@@ -809,6 +809,10 @@
         <input id="f-name" type="text" maxlength="40" placeholder="Jméno toho ztraceného">
       </div>
       <div class="field">
+        <label for="f-coming">Kdo se vrací (velký nadpis)</label>
+        <input id="f-coming" type="text" maxlength="60" placeholder="Např. Mates a Kačka">
+      </div>
+      <div class="field">
         <label for="f-place">Kde se fláká</label>
         <input id="f-place" type="text" maxlength="60" placeholder="Např. na Novém Zélandu">
       </div>
@@ -1037,6 +1041,7 @@
     setIfIdle("f-place", trip.place || "");
     setIfIdle("f-return", toLocalInput(trip.returnAt));
     setIfIdle("f-depart", trip.departAt ? toDateInput(trip.departAt) : "");
+    setIfIdle("f-coming", trip.coming || COMING_DEFAULT);
     setIfIdle("f-tz", trip.tz || defaultTrip().tz);
 
     renderChips();
@@ -1048,15 +1053,20 @@
   }
 
   /** Texty se mění podle toho, jestli se dívá Mates, nebo někdo z nás. */
+  var COMING_DEFAULT = "Mates a Kačka";
+
   function renderHeaderTexts() {
     var name = (trip.name || "").trim();
     var him = name || "Mates";
+    // V odpočtu se jmenují všichni, kdo přiletí — jinde zůstává jen ten jeden,
+    // kdo odsouhlasuje termíny, ať se texty nelámou ("Matesovo kývnutí").
+    var kdo = (trip.coming || "").trim() || COMING_DEFAULT;
     var past = trip.returnAt - Date.now() <= 0;
     var me = isMates();
 
     el("eyebrow").textContent = me
       ? (past ? "Jsi doma" : "Vracíš se domů za")
-      : (name ? (past ? (him + " je konečně doma") : (him + " se vrací za")) : "Odpočet do návratu");
+      : (name ? (past ? (kdo + " jsou konečně doma") : (kdo + " se vrací za")) : "Odpočet do návratu");
 
     var when = esc(fmtFull.format(new Date(trip.returnAt)));
     el("hero-sub").innerHTML = (me ? "Přistáváš " : "Přistává ") +
@@ -3598,6 +3608,7 @@
 
     var next = {
       name: (el("f-name").value || "").trim(),
+      coming: (el("f-coming").value || "").trim(),
       place: (el("f-place").value || "").trim(),
       returnAt: when,
       departAt: (dep && !isNaN(dep)) ? dep : null,
@@ -3665,7 +3676,7 @@
           var d = snap.data() || {};
           if (typeof d.returnAt === "number") {
             trip = {
-              name: d.name || "", place: d.place || "",
+              name: d.name || "", coming: d.coming || "", place: d.place || "",
               returnAt: d.returnAt,
               departAt: typeof d.departAt === "number" ? d.departAt : null,
               startedAt: typeof d.startedAt === "number" ? d.startedAt : defaultTrip().startedAt,
