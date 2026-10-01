@@ -393,6 +393,20 @@
   }
   li.plan .pchip.place{background:rgba(var(--amber-rgb),.09);border-color:rgba(var(--amber-rgb),.35)}
   .plan-tools{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px;align-items:center}
+  .alerts{display:flex;flex-direction:column;gap:9px;margin:14px 0 2px}
+  .alert{
+    border:1px solid rgba(var(--amber-rgb),.45);border-radius:12px;padding:12px 14px;
+    background:rgba(var(--amber-rgb),.09);display:flex;gap:10px;align-items:center;
+    flex-wrap:wrap;font-size:14px;line-height:1.45;
+  }
+  .alert.hot{
+    border-color:var(--amber);background:rgba(var(--amber-rgb),.17);
+    box-shadow:0 0 0 3px rgba(var(--amber-rgb),.10);
+  }
+  .alert .atxt{flex:1;min-width:190px}
+  .alert button{padding:7px 13px;font-size:13.5px;flex-shrink:0}
+  .alert .bell{font-size:17px;line-height:1}
+  .alerts .more{font-size:12.5px;color:var(--muted);margin:0 0 0 2px}
   .comments{margin-top:12px;border-top:1px solid var(--line-soft);padding-top:11px;display:flex;flex-direction:column;gap:9px}
   .comment{font-size:13.5px;line-height:1.45;overflow-wrap:anywhere}
   .comment b{font-family:var(--mono);font-size:11px;letter-spacing:.05em;color:var(--mint);font-weight:600;margin-right:7px}
@@ -666,6 +680,8 @@
     </div>
 
     <p class="mode-help" id="mode-help"></p>
+
+    <div class="alerts" id="cal-alerts" hidden></div>
 
     <div class="cal-bar">
       <div class="monthnav">
@@ -1051,8 +1067,9 @@
     el("legend-free").textContent = me ? "máš čas" : (name ? (him + " má čas") : "má čas");
 
     el("mode-help").textContent = me
-      ? "Označ dny, kdy budeš mít volno. Ostatní si tě na některý z nich zabookují a ty pak termín potvrdíš, nebo zamítneš."
-      : (him + " označí dny, kdy má volno. Ty si ho pak na některý z nich zabookuješ a " + him + " termín potvrdí, nebo zamítne.");
+      ? "Označ dny, kdy budeš mít volno. Ostatní si tě na některý z nich zabookují a ty pak termín potvrdíš, nebo zamítneš. Když se k někomu chce přidat další, taky to kývneš ty."
+      : (him + " označí dny, kdy má volno. Ty si ho pak na některý z nich zabookuješ a " + him + " termín potvrdí, nebo zamítne. "
+         + "A když má den zamluvený někdo jiný, klikni na něj a dej Přidám se taky — jde se ve více lidech.");
   }
 
   function setIfIdle(id, value) {
@@ -1678,7 +1695,104 @@
     el("next-m").disabled = cur >= minIdx + 12;
 
     renderCalHint();
+    renderCalAlerts();
     renderBooking();
+  }
+
+  /** Přepne kalendář na daný den, vybere ho a sjede k panelu. */
+  function goToDay(key) {
+    var d = dateOfKey(key);
+    viewYM = { y: d.getFullYear(), m: d.getMonth() };
+    selectedKey = key;
+    renderCalendar();
+    var b = el("booking");
+    if (b && b.scrollIntoView) {
+      try { b.scrollIntoView({ behavior: "smooth", block: "center" }); } catch (e) { b.scrollIntoView(); }
+    }
+  }
+
+  /** Nepřehlédnutelná upozornění nad kalendářem: Mates vidí, co čeká na jeho
+      kývnutí, ostatní vidí, ke komu se můžou přidat. */
+  function renderCalAlerts() {
+    var box = el("cal-alerts");
+    if (!box) { return; }
+    box.innerHTML = "";
+    if (!db || !role) { box.hidden = true; return; }
+
+    var min = firstBookable();
+    var me = nameKey(myName || "");
+    var him = (trip.name || "").trim() || "on";
+    var radky = [];
+
+    Object.keys(days).sort().forEach(function (k) {
+      var info = days[k];
+      if (!info || !info.available || dateOfKey(k) < min) { return; }
+      var kdy = fmtDayLong.format(dateOfKey(k));
+      var joiners = info.joiners || {};
+      var cekaji = Object.keys(joiners).filter(function (x) {
+        return joiners[x] && joiners[x].status === "pending";
+      });
+
+      if (isMates()) {
+        if (info.bookedBy && info.status !== "confirmed") {
+          radky.push({ hot: true, key: k, btn: "Rozhodnout",
+            html: "<b>" + esc(info.bookedBy) + "</b> si tě chce zamluvit — <b>" + esc(kdy) + "</b>." });
+        }
+        if (cekaji.length) {
+          var jm = cekaji.map(function (x) { return joiners[x].name; }).join(", ");
+          radky.push({ hot: true, key: k, btn: "Rozhodnout",
+            html: "<b>" + esc(jm) + "</b> se " + (cekaji.length > 1 ? "chtějí" : "chce") +
+                  " přidat — <b>" + esc(kdy) + "</b>. Čeká to na tvoje kývnutí." });
+        }
+        return;
+      }
+
+      if (!info.bookedBy || nameKey(info.bookedBy) === me) { return; }
+      var moje = joiners[me];
+      if (moje && moje.status === "ok") { return; }
+      if (moje) {
+        radky.push({ hot: false, key: k, btn: "Ukázat",
+          html: "Přihlásil(a) ses — <b>" + esc(kdy) + "</b>. Čeká se, až to " + esc(him) + " kývne." });
+      } else {
+        radky.push({ hot: true, key: k, btn: "Přidám se",
+          html: "<b>" + esc(info.bookedBy) + "</b> má zamluvený termín — <b>" + esc(kdy) + "</b>" +
+                (info.note ? ", " + esc(info.note) : "") + ". Můžeš se přidat!" });
+      }
+    });
+
+    if (!radky.length) { box.hidden = true; return; }
+    box.hidden = false;
+
+    radky.slice(0, 4).forEach(function (r) {
+      var d = document.createElement("div");
+      d.className = "alert" + (r.hot ? " hot" : "");
+
+      var zvon = document.createElement("span");
+      zvon.className = "bell";
+      zvon.textContent = r.hot ? "🔔" : "⏳";
+      d.appendChild(zvon);
+
+      var t = document.createElement("span");
+      t.className = "atxt";
+      t.innerHTML = r.html;
+      d.appendChild(t);
+
+      var b = document.createElement("button");
+      b.type = "button";
+      if (!r.hot) { b.className = "ghost"; }
+      b.textContent = r.btn;
+      b.addEventListener("click", function () { goToDay(r.key); });
+      d.appendChild(b);
+
+      box.appendChild(d);
+    });
+
+    if (radky.length > 4) {
+      var p = document.createElement("p");
+      p.className = "more";
+      p.textContent = "…a další " + (radky.length - 4) + " v kalendáři níž.";
+      box.appendChild(p);
+    }
   }
 
   function bindDay(node, key) {
