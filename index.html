@@ -998,7 +998,7 @@
 
     var fc = clockFor(tz);
     if (fc) {
-      var mine = isMates();
+      var mine = isTraveller();
       bits.push((mine ? "u tebe " : "u " + him + "a ") + fc.format(now));
       var d = hoursAhead(tz, now);
       if (d) {
@@ -1055,6 +1055,32 @@
   /** Texty se mění podle toho, jestli se dívá Mates, nebo někdo z nás. */
   var COMING_DEFAULT = "Mates a Kačka";
 
+  /** Kdo všechno se vrací — vyčte se z nadpisu „Kdo se vrací". Tihle lidi vidí
+      texty pro cestovatele (vracíš se domů za…, u tebe je…), ale termíny pořád
+      odsouhlasuje jen Mates. */
+  function travellerKeys() {
+    var raw = ((trip.coming || "").trim() || COMING_DEFAULT) + " a " + ((trip.name || "").trim() || "Mates");
+    var out = [];
+    raw.split(/\s+a\s+|\s*[,+&]\s*/).forEach(function (x) {
+      var k = nameKey(x.trim());
+      if (k && k !== "host" && out.indexOf(k) === -1) { out.push(k); }
+    });
+    return out;
+  }
+
+  /** Mates, nebo někdo další, kdo přiletí s ním (Kačka i Kača — drobné rozdíly
+      v psaní jména se odpouštějí stejně jako ve hrách). */
+  function isTraveller() {
+    if (isMates()) { return true; }
+    if (!myName) { return false; }
+    var me = nameKey(myName);
+    var ks = travellerKeys();
+    for (var i = 0; i < ks.length; i++) {
+      if (me === ks[i] || nearName(me, ks[i])) { return true; }
+    }
+    return false;
+  }
+
   function renderHeaderTexts() {
     var name = (trip.name || "").trim();
     var him = name || "Mates";
@@ -1063,13 +1089,14 @@
     var kdo = (trip.coming || "").trim() || COMING_DEFAULT;
     var past = trip.returnAt - Date.now() <= 0;
     var me = isMates();
+    var letim = isTraveller();   // Mates i Kačka — ti se vrací
 
-    el("eyebrow").textContent = me
+    el("eyebrow").textContent = letim
       ? (past ? "Jsi doma" : "Vracíš se domů za")
       : (name ? (past ? (kdo + " jsou konečně doma") : (kdo + " se vrací za")) : "Odpočet do návratu");
 
     var when = esc(fmtFull.format(new Date(trip.returnAt)));
-    el("hero-sub").innerHTML = (me ? "Přistáváš " : "Přistává ") +
+    el("hero-sub").innerHTML = (letim ? "Přistáváš " : "Přistává ") +
       "<strong>" + when + "</strong> našeho času.";
     renderClocks();
 
@@ -1158,13 +1185,13 @@
       el("arrived").hidden = false;
       var back = Math.abs(diff);
       var days = Math.floor(back / 86400000);
-      el("arrived-title").textContent = isMates()
+      el("arrived-title").textContent = isTraveller()
         ? "Jsi doma!"
         : (trip.name ? (trip.name + " přistál!") : "Přistál!");
       el("arrived-sub").textContent = days > 0
-        ? ((isMates() ? "Jsi doma už " : "Doma už ") + days + " " + plural(days, "den", "dny", "dní") +
+        ? ((isTraveller() ? "Jsi doma už " : "Doma už ") + days + " " + plural(days, "den", "dny", "dní") +
            " a ten seznam dole se sám neodškrtne.")
-        : (isMates()
+        : (isTraveller()
           ? "Právě teď. Někdo by pro tebe měl dorazit na letiště."
           : "Právě teď. Někdo pro něj skočte na letiště, ať tam nestojí jak kůl v plotě.");
       renderChips();
@@ -1263,7 +1290,7 @@
       ? "Dopito"
       : ("zbývá " + left + " " + plural(left, "lok", "loky", "loků"));
     el("beer-sub").textContent = done
-      ? ("Sklenice je prázdná. Rundu " + (isMates() ? "platíš ty." : "platí " + him + "."))
+      ? ("Sklenice je prázdná. Rundu " + (isTraveller() ? "platíš ty." : "platí " + him + "."))
       : ("vypito " + (glassTotal - left) + " z " + glassTotal + " loků");
   }
 
